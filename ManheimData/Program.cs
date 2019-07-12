@@ -123,12 +123,11 @@ namespace ManheimData
                 _eventstoExcel.Save("./1 manheimEvents.xlsx");
 
                 Console.WriteLine("End events...");
-                Console.ReadKey();
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex);
-                Console.WriteLine("End with ex...");
+                Console.WriteLine("End with exeption");
                 Console.ReadLine();
             }
         }
