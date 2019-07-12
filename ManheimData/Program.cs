@@ -4,6 +4,8 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RestSharp;
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -12,12 +14,11 @@ namespace ManheimData
     class Program
     {
         private static IMapper _mapper;
-        private static ToExcel _toExcel;
+        private static List<EventModel> _savedEvents;
 
         static void Main(string[] args)
         {
             _mapper = Mapper.CreateMapper();
-            _toExcel = new ToExcel();
 
             RetrieveData();
         }
@@ -29,12 +30,13 @@ namespace ManheimData
             Console.WriteLine("ManheimAPI -> RetrieveData -> sales: End");
 
             Console.WriteLine("ManheimAPI -> RetrieveData -> listings: Start");
-            //await RetrieveListings();
+            RetrieveListings();
             Console.WriteLine("ManheimAPI -> RetrieveData -> listings: End");
         }
 
         protected static void RetrieveSales()
         {
+            ToExcel _eventstoExcel = new ToExcel();
             try
             {
                 var pageSize = 5000;
@@ -76,7 +78,7 @@ namespace ManheimData
                             }
 
                             //ToExcel
-                            _toExcel.EventsData("AllData", "", response.sales);
+                            _eventstoExcel.SalesData("AllSales", "", response.sales);
 
                             var responseEvents = response?.sales
                                 .Where(x => !string.IsNullOrEmpty(x.saleDateTime))
@@ -85,7 +87,7 @@ namespace ManheimData
                                 .ToList();
 
                             //ToExcel
-                            _toExcel.EventsData("Filtered", "Filter: no empty saleDateTime, only events in current mont, no empty uniqueId", responseEvents);
+                            _eventstoExcel.SalesData("Filtered", "Filter: no empty saleDateTime, only events in current mont, no empty uniqueId", responseEvents);
 
                             //group by name & date of event
                             var responseEventsMapped = responseEvents
@@ -103,7 +105,11 @@ namespace ManheimData
                             .ToList();
 
                             //ToExcel
-                            _toExcel.EventsData("Grouped", "Grouped by auctionName&saleDateTime", responseEventsMapped);
+                            _eventstoExcel.SalesData("Grouped", "Grouped by auctionName&saleDateTime", responseEventsMapped);
+
+                            //save result into variable to use with vehicles
+                            _savedEvents = responseEventsMapped.Select(sr => _mapper.Map<EventModel>(sr)).ToList();
+                            _eventstoExcel.EventsData("mappedEvents", "", _savedEvents);
 
                             //await _eventsService.PutItems(responseEventsMapped);
                         }
@@ -114,9 +120,9 @@ namespace ManheimData
                     }
                 } while (currentPage < numberOfPages);
 
-                _toExcel.Save("./manheimData.xlsx");
+                _eventstoExcel.Save("./1 manheimEvents.xlsx");
 
-                Console.WriteLine("End...");
+                Console.WriteLine("End events...");
                 Console.ReadKey();
             }
             catch (Exception ex)
@@ -125,6 +131,117 @@ namespace ManheimData
                 Console.WriteLine("End with ex...");
                 Console.ReadLine();
             }
+        }
+
+        protected static void RetrieveListings()
+        {
+            ToExcel _allListingsToExcel = new ToExcel();
+            ToExcel _filteredListingsToExcel = new ToExcel();
+            ToExcel _groupedVehiclesToExcel = new ToExcel();
+            ToExcel _vehiclesWithEventsToExcel = new ToExcel();
+
+            var pageSize = 5000;
+            var responseAPIManheim = "";
+            var numberOfPages = 0.0;
+
+            var currentPage = 0;
+            do
+            {
+                currentPage++;
+                Console.WriteLine($"RetrieveListings Page:{currentPage} of {numberOfPages}");
+
+                //Retrieve API response
+                try
+                {
+                    responseAPIManheim = GetConsumeAPI("isws-basic/listings", "UPDATE_TIMESTAMP", pageSize, currentPage);
+                    if (string.IsNullOrEmpty(responseAPIManheim))
+                    {
+                        Console.WriteLine($"Variable responseAPIManheim retrieved null/empty for page: {currentPage}");
+                        continue;
+                    }
+
+                    if (numberOfPages == 0.0)
+                    {
+                        var responseSales = JObject.Parse(responseAPIManheim);
+                        var totalListings = (double)responseSales["totalListings"];
+                        numberOfPages = Math.Ceiling(totalListings / pageSize);
+                    }
+
+                    var response = JsonConvert.DeserializeObject<ManheimOpenListingsResponse>(responseAPIManheim);
+                    if (response == null || response.listings == null)
+                    {
+                        Console.WriteLine($"Response from Manheim is empty (listings) for page {currentPage}");
+                        continue;
+                    }
+
+                    //ToExcel
+                    _allListingsToExcel.ListingsData("AllListings_" + currentPage, "", response.listings);
+
+                    //Filter valid records
+                    var responseListing = response?.listings
+                        .Where(x => (x.VehicleInformation.adjMmr > 0.0 && x.VehicleInformation.adjMmr <= 20000.0))
+                        .Where(x => !string.IsNullOrEmpty(x.SaleInformation.uniqueId))
+                        .Where(x => !string.IsNullOrEmpty(x.VehicleInformation.vin) && FieldsValidation.IsAlphanumeric(x.VehicleInformation.vin))
+                        .Where(x => !string.IsNullOrEmpty(x.VehicleInformation.updateTimestamp)
+                            && DateTime.TryParseExact(
+                                x.VehicleInformation.updateTimestamp,
+                                "yyyyMMddHHmmss",
+                                null,
+                                DateTimeStyles.None,
+                                out DateTime parsedDate)
+                            )
+                        .ToList();
+
+                    //ToExcel
+                    _filteredListingsToExcel.ListingsData("Filtered_" + currentPage, "Filter: adjMmr(>0&<=20000), no empty uniqueId, no empty vin&IsAlphanumeric, no invalid updateTimestamp", responseListing);
+
+                    if (!responseListing.Any())
+                    {
+                        continue;
+                    }
+
+                    //Map data and take the newest record from a group of Vins
+                    var vehicleResponseMapped = responseListing
+                        .Select(sr => _mapper.Map<VehicleModel>(sr))
+                        .GroupBy(x => x.Vin)
+                        .Select(
+                            x => x.OrderByDescending(y => y.UpdateTime)
+                                .FirstOrDefault()
+                        )
+                        .ToList();
+                    //ToExcel
+                    _groupedVehiclesToExcel.VehiclesData("Grouped_"+currentPage, "Group: by VIN, sortedDesc by UpdateTime and take firts", vehicleResponseMapped);
+
+                    //Filter Vehicles that are related with an Event
+                    List<VehicleModel> vehicleWithEvent = SyncUtils.RelateVehiclesWithEvents(vehicleResponseMapped, _savedEvents);
+                    //ToExcel
+                    _vehiclesWithEventsToExcel.VehiclesData("WithEvents_" + currentPage, "", vehicleWithEvent);
+
+                    if (vehicleWithEvent.Any())
+                    {
+                        //await _vehicleService.PutItems(vehicleWithEvent);
+                    }
+                }
+               catch (Exception ex)
+                {
+                    Console.WriteLine(ex.ToString());
+                }
+            } while (currentPage < numberOfPages);
+
+            Console.WriteLine("Saving manheimAllListings");
+            _allListingsToExcel.Save("./2 manheimAllListings.xlsx");
+
+            Console.WriteLine("Saving manheimDataFiltered");
+            _filteredListingsToExcel.Save("./3 manheimDataFiltered.xlsx");
+
+            Console.WriteLine("Saving manheimDataGrouped");
+            _groupedVehiclesToExcel.Save("./4 manheimDataGrouped.xlsx");
+
+            Console.WriteLine("Saving manheimDataWithEvents");
+            _vehiclesWithEventsToExcel.Save("./5 manheimDataWithEvents.xlsx");
+
+            Console.WriteLine("End vehicles...");
+            Console.ReadKey();
         }
 
         protected static string GetConsumeAPI(string resource, string sort, int pageSize, int pageNumber = 1)
