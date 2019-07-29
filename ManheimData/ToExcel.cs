@@ -138,7 +138,7 @@ namespace ManheimData
             _table.Columns.Add("saleYear", typeof(string));
             //_table.Columns.Add("vehicleSaleURL", typeof(string));
             _table.Columns.Add("sellerName", typeof(string));
-            
+
             //_table.Columns.Add("asIs", typeof(string));
             //_table.Columns.Add("bodyStyle", typeof(string));
             _table.Columns.Add("buyerGroupId", typeof(string));
@@ -198,7 +198,7 @@ namespace ManheimData
                     //item.SaleInformation.vehicleSaleURL,
                     item.SellerInformation.sellerName,
 
-                    
+
                     //item.VehicleInformation.asIs,
                     //item.VehicleInformation.bodyStyle,
                     item.VehicleInformation.buyerGroupId,
@@ -393,7 +393,12 @@ namespace ManheimData
 
         public void Save(string path)
         {
-            workbook.SaveAs(path);
+            string folder = Environment.GetEnvironmentVariable("FILES_FOLDER");
+            if (folder == null)
+            {
+                folder = "./";
+            }
+            workbook.SaveAs(folder + path);
             workbook.Dispose();
         }
     }

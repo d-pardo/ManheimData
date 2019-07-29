@@ -120,7 +120,7 @@ namespace ManheimData
                     }
                 } while (currentPage < numberOfPages);
 
-                _eventstoExcel.Save("./1 manheimEvents.xlsx");
+                _eventstoExcel.Save("1_manheimEvents.xlsx");
 
                 Console.WriteLine("End events...");
             }
@@ -228,16 +228,16 @@ namespace ManheimData
             } while (currentPage < numberOfPages);
 
             Console.WriteLine("Saving manheimAllListings");
-            _allListingsToExcel.Save("./2 manheimAllListings.xlsx");
+            _allListingsToExcel.Save("2_manheimAllListings.xlsx");
 
             Console.WriteLine("Saving manheimDataFiltered");
-            _filteredListingsToExcel.Save("./3 manheimDataFiltered.xlsx");
+            _filteredListingsToExcel.Save("3_manheimDataFiltered.xlsx");
 
             Console.WriteLine("Saving manheimDataGrouped");
-            _groupedVehiclesToExcel.Save("./4 manheimDataGrouped.xlsx");
+            _groupedVehiclesToExcel.Save("4_manheimDataGrouped.xlsx");
 
             Console.WriteLine("Saving manheimDataWithEvents");
-            _vehiclesWithEventsToExcel.Save("./5 manheimDataWithEvents.xlsx");
+            _vehiclesWithEventsToExcel.Save("5_manheimDataWithEvents.xlsx");
 
             Console.WriteLine("End vehicles...");
             Console.ReadKey();
